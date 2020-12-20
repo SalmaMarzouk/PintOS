@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "lib/kernel/list.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -19,6 +20,8 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
+struct list sleeping;  //sleeping threads (modified)
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -37,7 +40,9 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleeping);            //modified
 }
+
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
 void
@@ -83,22 +88,28 @@ timer_elapsed (int64_t then)
 {
   return timer_ticks () - then;
 }
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
-     // modified Code
-  // For alarm-negative && alarm-zero
-  if (ticks <= 0) return;
-
+  
   ASSERT (intr_get_level () == INTR_ON);
-  enum intr_level current = intr_disable();
-  struct thread*currentThread=thread_current();
-  /* Blocks current thread for ticks */
-  currentThread->blockTime = ticks;
+  /*while (timer_elapsed (start) < ticks) 
+    thread_yield ();*/
+
+
+  //modified 
+  enum intr_level interruptState;
+  struct thread* currentThread;
+  currentThread=thread_current();
+  currentThread->endTime=timer_ticks()+ticks;
+  list_insert_ordered (&sleeping, &currentThread->elem, waitUntillTicks, NULL);
+
+  interruptState=intr_disable();
   thread_block();
-  intr_set_level(current);
+  intr_set_level(interruptState);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -175,10 +186,24 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-    //modified
-    thread_foreach(checkForAwake,NULL);
-    ticks++;
-    thread_tick ();
+  ticks++;
+  thread_tick ();
+
+  //modified
+  struct list_elem *element;
+  struct thread *thisThread;
+  while(!list_empty(&sleeping)){
+    element=list_front(&sleeping);
+    thisThread=list_entry(element,struct thread,elem);
+    if(thisThread->endTime>timer_ticks()){
+      break;
+    }
+    enum intr_level interruptState=intr_disable();
+    list_remove(element);
+    thread_unblock(thisThread);
+    intr_set_level(interruptState);
+  }
+
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
