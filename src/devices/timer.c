@@ -94,6 +94,7 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
+  if (ticks <= 0) return;
   
   ASSERT (intr_get_level () == INTR_ON);
   /*while (timer_elapsed (start) < ticks) 
