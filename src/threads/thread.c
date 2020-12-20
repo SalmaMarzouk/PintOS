@@ -1,5 +1,4 @@
 #include "threads/thread.h"
-#include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -25,9 +24,14 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
+
+//modified2
+//struct list sleeping;  //sleeping threads
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -70,7 +74,6 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -124,7 +127,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
+  
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -138,6 +141,7 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+  
 }
 
 /* Prints thread statistics. */
@@ -182,7 +186,6 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
-  t->blockTime = 0;		//modified
   tid = t->tid = allocate_tid ();
 
   /* Stack frame for kernel_thread(). */
@@ -221,19 +224,7 @@ thread_block (void)
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
-//modified
-void checkForAwake(struct thread *thread,void *aux UNUSED){
- if (thread->status == THREAD_BLOCKED && thread->blockTime > 0)
-  {
-    enum intr_level current;
-    --thread->blockTime;
-	if (thread->blockTime == 0){
-	  current=intr_disable();
-	  thread_unblock(thread);
-	  intr_set_level(current);
-	  }
-  }
-}
+
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -346,6 +337,8 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -390,7 +383,7 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -439,7 +432,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /* Execute the thread function. */
   thread_exit ();       /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread (void) 
@@ -597,3 +590,11 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+//modified
+//compapring end time of each thread 
+bool waitUntillTicks(const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
+  struct thread*thread1=list_entry(a,struct thread,elem);
+  struct thread*thread2=list_entry(b,struct thread,elem);
+  return thread1->endTime < thread2->endTime;
+}
