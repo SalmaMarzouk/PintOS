@@ -83,6 +83,7 @@ typedef int tid_t;
 struct thread
   {
     /* Owned by thread.c. */
+    int64_t endTime;   //modified
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
@@ -92,8 +93,6 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    // modified
-    int64_t blockTime;              /* time of thread sleeping. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -119,7 +118,7 @@ typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
-void checkForAwake(struct thread *thread,void *aux UNUSED);		//modified
+bool waitUntillTicks(const struct list_elem *a,const struct list_elem *b,void *aux UNUSED); //modified
 void thread_unblock (struct thread *);
 
 struct thread *thread_current (void);
