@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/fixed-point.h"    //modified
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -83,7 +84,9 @@ typedef int tid_t;
 struct thread
   {
     /* Owned by thread.c. */
-    int64_t endTime;   //modified
+    int64_t endTime;   //modified   time when the thread finished sleeping.
+    int nice;          //modified   nice value that determines how "nice" the thread should be to other threads.
+    fp recent_cpu;     //modified   the amount of CPU time a thread has received recently.
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
@@ -107,6 +110,7 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+fp load_avg;        //modified   the average number of threads ready to run over the past minute.
 
 void thread_init (void);
 void thread_start (void);
@@ -135,6 +139,10 @@ void thread_foreach (thread_action_func *, void *);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
+int threads_max_priority(void);     //modified
+void calculate_priority(struct thread *t);    //modified
+void calculate_load_avg(void);           //modified
+void calculate_recent_cpu(struct thread *t);     //modified
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
