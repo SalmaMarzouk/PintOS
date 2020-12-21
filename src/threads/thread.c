@@ -431,8 +431,9 @@ int threads_max_priority(void)
 //modified
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED)
+thread_set_nice (int nice)
 {
+    ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
     thread_current()->nice = nice;
     calculate_priority(thread_current());
     //If the running thread no longer has the highest priority.
