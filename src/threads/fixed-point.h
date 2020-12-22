@@ -2,7 +2,12 @@
 #define THREADS_FIXED_POINT_H
 
 #define Q 14
+#define P 17
 #define F (1<<Q)
+
+#if P + Q != 31
+#error "ERROR: P + Q != 31."
+#endif
 
 typedef int fp;
 

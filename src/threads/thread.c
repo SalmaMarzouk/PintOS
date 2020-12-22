@@ -130,7 +130,7 @@ void calculate_priority(struct thread *t){
     ASSERT(thread_mlfqs);
     if (t == idle_thread)
         return;
-    t->priority = toInt_round_nearest(PRI_MAX - toInt_round_nearest(int_divide(t->recent_cpu,4)) - (t->nice*2));
+    t->priority = PRI_MAX - toInt_round_nearest(int_divide(t->recent_cpu,4)) - (t->nice*2);
     if (t->priority < PRI_MIN)
         t->priority = PRI_MIN;
     else if (t->priority > PRI_MAX)
@@ -143,13 +143,15 @@ void calculate_load_avg(void ){
     size_t ready_threads = list_size(&ready_list);
     if (thread_current() != idle_thread)
         ++ready_threads;
-    load_avg = add_int(int_divide(int_multiply(load_avg,59),60),ready_threads/60);
+    load_avg=fp_multiply(int_divide(convert_to_fp(59),60),load_avg)+int_multiply(int_divide(convert_to_fp(1),60),ready_threads);
 }
 //modified
 void calculate_recent_cpu(struct thread *t){
     ASSERT(thread_mlfqs);
-    fp coefficient = int_divide(int_multiply(load_avg,2),add_int(int_multiply(load_avg,2),1));
-    t->recent_cpu = add_int(fp_multiply(coefficient,t->recent_cpu),t->nice);
+    if(t!=idle_thread){
+        int coefficient=fp_divide(int_multiply(load_avg,2),add_int(int_multiply(load_avg,2),1));
+        t->recent_cpu=add_int(fp_multiply(coefficient,t->recent_cpu),t->nice);
+    }
 }
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
@@ -173,6 +175,16 @@ thread_tick (void)
       if(t!=idle_thread){
           t->recent_cpu = add_int(t->recent_cpu,1);
       }
+      if(timer_ticks() % 4 == 0){
+          struct list_elem *e;
+          struct thread *thread;
+          for (e = list_begin (&all_list);e != list_end (&all_list);e = list_next (e))
+          {
+              thread= list_entry (e, struct thread, allelem);
+              calculate_priority(thread);
+              list_sort(&ready_list,priority_sort,NULL);
+          }
+      }
       if(timer_ticks() % TIMER_FREQ == 0){
           struct list_elem *e;
           struct thread *thread;
@@ -184,16 +196,7 @@ thread_tick (void)
               calculate_recent_cpu(thread);
           }
       }
-      if(timer_ticks() % 4 == 0){
-          struct list_elem *e;
-          struct thread *thread;
-          for (e = list_begin (&all_list);e != list_end (&all_list);e = list_next (e))
-          {
-              thread= list_entry (e, struct thread, allelem);
-              calculate_priority(thread);
-              list_sort(&ready_list,priority_sort,NULL);
-          }
-      }
+
 
   }
 
@@ -319,10 +322,11 @@ thread_unblock (struct thread *t)
 if(!thread_mlfqs) {
 //insert threads in ready list ordered according to their effective priority
     list_insert_ordered(&ready_list, &t->elem, thread_less_func, NULL);
-    t->status = THREAD_READY;
 }else{
     list_insert_ordered(&ready_list, &t->elem, priority_sort, NULL);
 }
+    t->status = THREAD_READY;
+
   intr_set_level (old_level);
   
 }
@@ -393,10 +397,10 @@ thread_yield (void) {
     old_level = intr_disable();
     if (cur != idle_thread) {
         if (!thread_mlfqs) {
-            //inseret thread in ready list order according effective priority
+            //insert thread in ready list order according effective priority
             list_insert_ordered(&ready_list, &cur->elem, thread_less_func, NULL);
         }else {
-            //inseret thread in ready list order according priority
+            //insert thread in ready list order according priority
             list_insert_ordered(&ready_list, &cur->elem, priority_sort, NULL);
         }
  }
@@ -540,9 +544,11 @@ int threads_max_priority(void)
 void
 thread_set_nice (int nice)
 {
+   // ASSERT(thread_mlfqs);
     ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
     enum intr_level current = intr_disable();
     thread_current()->nice = nice;
+    calculate_recent_cpu(thread_current());
     calculate_priority(thread_current());
     //If the running thread no longer has the highest priority.
     if(threads_max_priority() > thread_get_priority())
@@ -550,7 +556,6 @@ thread_set_nice (int nice)
         thread_yield();
     }
     intr_set_level(current);
-
 
 }
 //modified
