@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/fixed-point.h"    //modified
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -87,7 +88,7 @@ typedef int tid_t;
 struct thread
   {
     /* Owned by thread.c. */
-    int64_t endTime;   //modified   time when the thread finished sleeping.
+    int64_t endTime;   //modified
     int nice;          //modified   nice value that determines how "nice" the thread should be to other threads.
     fp recent_cpu;     //modified   the amount of CPU time a thread has received recently.
     tid_t tid;                          /* Thread identifier. */
@@ -104,9 +105,16 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    
+    // new defined
+    int effective_priority;             /*priority or max donated priority*/
+    struct list holded_locks;           /*list of locks holded by thread*/
+    struct lock *aquired_locks;         /*the lock which the thread wait*/
+
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    
   };
 
 /* If false (default), use round-robin scheduler.
@@ -126,6 +134,7 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 bool waitUntillTicks(const struct list_elem *a,const struct list_elem *b,void *aux UNUSED); //modified
+bool priority_sort ( const struct list_elem *a, const struct list_elem *b, void *aux );    //modified
 void thread_unblock (struct thread *);
 
 struct thread *thread_current (void);
@@ -142,6 +151,7 @@ void thread_foreach (thread_action_func *, void *);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
+//void set_effective_priority ( struct thread* t, int new_priority)
 int threads_max_priority(void);     //modified
 void calculate_priority(struct thread *t);    //modified
 void calculate_load_avg(void);           //modified
@@ -151,4 +161,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void set_effective_priority ( struct thread *t, int new_priority);
 #endif /* threads/thread.h */
