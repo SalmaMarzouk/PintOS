@@ -15,18 +15,19 @@ void open_wrapper(struct intr_frame *f,void* esp);
 int open (const char *file);
 void read_wrapper (struct intr_frame *f,void* esp);
 int read (int fd, void *buffer, unsigned size);
+int write (int fd, const void *buffer, unsigned size);
 struct fd_element* get_fd(int fd);
 
 
 void
-syscall_init (void) 
+syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init(&files_sync_lock);
 }
 
 static void
-syscall_handler (struct intr_frame *f) 
+syscall_handler (struct intr_frame *f)
 {
   //modified
   int sys_code = *(int*)f->esp;
@@ -38,28 +39,28 @@ syscall_handler (struct intr_frame *f)
            exit_wrapper(f->esp);
            break;
        case SYS_EXEC:
-           
+
            break;
        case SYS_WAIT:
-          
+
            break;
        case SYS_CREATE:
-       
+
            break;
        case SYS_REMOVE:
-       
+
            break;
        case SYS_OPEN:
            open_wrapper(f,f->esp);
            break;
        case SYS_FILESIZE:
-       
+
            break;
        case SYS_READ:
            read_wrapper(f,f -> esp);
            break;
        case SYS_WRITE:
-           write_wrapper(f -> esp);
+           write_wrapper(f,f -> esp);
            break;
        case SYS_SEEK:
 
@@ -79,6 +80,9 @@ void open_wrapper(struct intr_frame *f,void* esp){
     f -> eax = open((const char *)(*((int*)esp+1)));
 }
 int open (const char *file){
+    if(!file){
+        return -1;
+    }
     int fd ;
     lock_acquire(&files_sync_lock);
     struct thread *current = thread_current ();
@@ -135,15 +139,40 @@ int read(int fd, void *buffer, unsigned size){
     }
     return bytes_read;
 }
-void write_wrapper(void* esp){
+void write_wrapper(struct intr_frame *f,void *esp){
     int fd = *((int*)esp+1);
     void* buffer = (void*)(*((int*)esp+2));
     unsigned size = * ((unsigned*)esp+3);
-    validate_void_ptr(buffer);
-    if(fd==1){
-       putbuf (buffer, (size_t) size);
-     }
 
+    validate_void_ptr(buffer);
+    validate_void_ptr(buffer+size);
+    f->eax= write(fd,buffer,size);
+
+}
+int write(int fd, const void *buffer, unsigned size){
+    int written=-1;
+    struct file* f;
+    lock_acquire(&files_sync_lock);
+    if(fd==1){
+        putbuf(buffer,(size_t) size);
+    }
+    else if(fd==0){
+        lock_release(&files_sync_lock);
+        return written;
+    }
+    else{
+        struct fd_element *search;
+        struct list_elem *elem;
+        search=get_fd(fd);
+        if(!search){
+            lock_release(&files_sync_lock);
+            return written;
+        }
+        f=search->file;
+        written=file_write(f,buffer,size);
+    }
+    lock_release(&files_sync_lock);
+    return written;
 }
 
 void exit_wrapper(void *esp){
