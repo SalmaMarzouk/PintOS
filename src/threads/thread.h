@@ -30,13 +30,11 @@ typedef int tid_t;
 #define NICE_MAX 20
 
 /* A kernel thread or user process.
-
    Each thread structure is stored in its own 4 kB page.  The
    thread structure itself sits at the very bottom of the page
    (at offset 0).  The rest of the page is reserved for the
    thread's kernel stack, which grows downward from the top of
    the page (at offset 4 kB).  Here's an illustration:
-
         4 kB +---------------------------------+
              |          kernel stack           |
              |                |                |
@@ -58,22 +56,18 @@ typedef int tid_t;
              |               name              |
              |              status             |
         0 kB +---------------------------------+
-
    The upshot of this is twofold:
-
       1. First, `struct thread' must not be allowed to grow too
          big.  If it does, then there will not be enough room for
          the kernel stack.  Our base `struct thread' is only a
          few bytes in size.  It probably should stay well under 1
          kB.
-
       2. Second, kernel stacks must not be allowed to grow too
          large.  If a stack overflows, it will corrupt the thread
          state.  Thus, kernel functions should not allocate large
          structures or arrays as non-static local variables.  Use
          dynamic allocation with malloc() or palloc_get_page()
          instead.
-
    The first symptom of either of these problems will probably be
    an assertion failure in thread_current(), which checks that
    the `magic' member of the running thread's `struct thread' is
@@ -111,10 +105,19 @@ struct thread
     struct list holded_locks;           /*list of locks holded by thread*/
     struct lock *aquired_locks;         /*the lock which the thread wait*/
 
+    //phase 2
+    struct list fd_list; 				//list of file descriptors
+    int fd_size;						//size of the file descriptors
+    struct thread *parent;
+    struct list_elem child_elem;
+    struct list children;
+    int child_status;
+    bool child_creation_sucess;
+    struct semaphore wait;
+    struct semaphore parent_child_sync;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    
   };
 
 /* If false (default), use round-robin scheduler.
