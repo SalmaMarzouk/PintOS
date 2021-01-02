@@ -681,7 +681,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->nice = 0;  //modified
   t->recent_cpu = convert_to_fp(0);   //modified
   list_init(&t->fd_list);   //phase 2
-  t->fd_size = 0;
+  t->fd_size = 1;
   //modified
     if(thread_mlfqs) {
         if(strcmp(t->name,"main")==0)
