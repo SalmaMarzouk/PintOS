@@ -7,14 +7,15 @@
 #include "filesys/filesys.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
+void validate_void_ptr(const void* pt);
 void open_wrapper(struct intr_frame *f,void* esp);
 int open (const char *file);
 void read_wrapper (struct intr_frame *f,void* esp);
 int read (int fd, void *buffer, unsigned size);
 struct fd_element* get_fd(int fd);
-void validate_void_ptr(const void* pt);
 
 
 void
@@ -73,12 +74,12 @@ syscall_handler (struct intr_frame *f)
 }
 
 void open_wrapper(struct intr_frame *f,void* esp){
-    void* valid = (void*)(*((int*)esp+1));
-    validate_void_ptr(valid);
+    void* file_name = (void*)(*((int*)esp+1));
+    validate_void_ptr(file_name);
     f -> eax = open((const char *)(*((int*)esp+1)));
 }
 int open (const char *file){
-    int fd = -1;    //returned if the file could not be opened.
+    int fd ;
     lock_acquire(&files_sync_lock);
     struct thread *current = thread_current ();
     struct file * opened_file = filesys_open(file);
@@ -87,11 +88,14 @@ int open (const char *file){
     {
         current->fd_size = current->fd_size + 1;
         fd = current->fd_size;
-        struct fd_element *file = (struct fd_element*) malloc(sizeof(struct fd_element));
-        file->fd = fd;
-        file->file = opened_file;
+        struct fd_element *f = (struct fd_element*) malloc(sizeof(struct fd_element));
+        f->fd = fd;
+        f->file = opened_file;
         // add the fd_element to the thread fd_list
-        list_push_back(&current->fd_list, &file->element);
+        list_push_back(&current->fd_list, &f->element);
+    } else{
+        //if the file could not be opened.
+        fd = -1;
     }
     return fd;
 }
@@ -168,4 +172,5 @@ struct fd_element* get_fd(int fd)
     }
     return NULL;
 }
+
 
