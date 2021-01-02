@@ -11,10 +11,17 @@
 
 static void syscall_handler (struct intr_frame *);
 void validate_void_ptr(const void* pt);
+void create_wrapper(struct intr_frame *f,void* esp);
+bool create (const char *file, unsigned initial_size);
+void remove_wrapper(struct intr_frame *f,void* esp);
+bool remove (const char *file);
+void filesize_wrapper(struct intr_frame *f,void* esp);
+int filesize (int fd);
 void open_wrapper(struct intr_frame *f,void* esp);
 int open (const char *file);
 void read_wrapper (struct intr_frame *f,void* esp);
 int read (int fd, void *buffer, unsigned size);
+void write_wrapper(struct intr_frame *f,void *esp);
 int write (int fd, const void *buffer, unsigned size);
 struct fd_element* get_fd(int fd);
 
@@ -45,16 +52,16 @@ syscall_handler (struct intr_frame *f)
 
            break;
        case SYS_CREATE:
-
+           create_wrapper(f,f -> esp);
            break;
        case SYS_REMOVE:
-
+           remove_wrapper(f,f -> esp);
            break;
        case SYS_OPEN:
            open_wrapper(f,f->esp);
            break;
        case SYS_FILESIZE:
-
+           filesize_wrapper(f,f -> esp);
            break;
        case SYS_READ:
            read_wrapper(f,f -> esp);
@@ -72,6 +79,30 @@ syscall_handler (struct intr_frame *f)
 
            break;
 }
+}
+
+void create_wrapper(struct intr_frame *f,void* esp){
+    void* file_name = (void*)(*((int*)esp+1));
+    validate_void_ptr(file_name);
+    f -> eax = create((const char*)(*((int*)esp+1)),(unsigned )(*((int*)esp+2)));
+}
+bool create (const char *file, unsigned initial_size){
+    lock_acquire(&files_sync_lock);
+    bool created = filesys_create(file, initial_size);
+    lock_release(&files_sync_lock);
+    return created;
+}
+
+void remove_wrapper(struct intr_frame *f,void* esp){
+    void* file_name = (void*)(*((int*)esp+1));
+    validate_void_ptr(file_name);
+    f -> eax = remove((const char*)(*((int*)esp+1)));
+}
+bool remove (const char *file){
+    lock_acquire(&files_sync_lock);
+    bool removed = filesys_remove(file);
+    lock_release(&files_sync_lock);
+    return removed;
 }
 
 void open_wrapper(struct intr_frame *f,void* esp){
@@ -102,6 +133,19 @@ int open (const char *file){
         fd = -1;
     }
     return fd;
+}
+
+void filesize_wrapper(struct intr_frame *f,void* esp){
+    void* fd = (void*)(*((int*)esp+1));
+    validate_void_ptr(fd);
+    f -> eax = filesize(fd);
+}
+int filesize (int fd){
+    struct file *file = get_fd(fd)->file;
+    lock_acquire(&files_sync_lock);
+    int size = file_length(file);
+    lock_release(&files_sync_lock);
+    return size;
 }
 
 void read_wrapper (struct intr_frame *f,void* esp){
@@ -139,6 +183,7 @@ int read(int fd, void *buffer, unsigned size){
     }
     return bytes_read;
 }
+
 void write_wrapper(struct intr_frame *f,void *esp){
     int fd = *((int*)esp+1);
     void* buffer = (void*)(*((int*)esp+2));
