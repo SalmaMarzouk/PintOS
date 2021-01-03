@@ -23,6 +23,7 @@ void read_wrapper (struct intr_frame *f,void* esp);
 int read (int fd, void *buffer, unsigned size);
 void write_wrapper(struct intr_frame *f,void *esp);
 int write (int fd, const void *buffer, unsigned size);
+void close (int fd);
 struct fd_element* get_fd(int fd);
 
 
@@ -76,7 +77,7 @@ syscall_handler (struct intr_frame *f)
 
            break;
        case SYS_CLOSE:
-
+           close(*((int*)f->esp+1));
            break;
 }
 }
@@ -161,7 +162,7 @@ int read(int fd, void *buffer, unsigned size){
     int bytes_read = -1;
     if(fd == 0)     //keyboard read
     {
-        bytes_read = input_getc();
+        bytes_read = (int)input_getc();
     }
     else if(fd > 0)     //file read
     {
@@ -226,6 +227,25 @@ void exit_wrapper(void *esp){
     thread_exit();
 }
 
+void close (int fd){
+    struct list_elem *e;
+    if(list_empty(&thread_current()->fd_list))
+    {
+        return;
+    }
+    lock_acquire(&files_sync_lock);
+    for (e = list_begin (&thread_current()->fd_list); e != list_end (&thread_current()->fd_list);e = list_next (e))
+    {
+        struct fd_element *elem = list_entry (e, struct fd_element, element);
+        if(elem->fd == fd){
+            file_close(elem->file);
+            list_remove(e);
+        }
+    }
+    lock_release(&files_sync_lock);
+    return;
+
+}
 
 void validate_void_ptr(const void* pt){
     if(!((pt!=NULL)&&(is_user_vaddr(pt))&&(pagedir_get_page (thread_current()->pagedir, pt)!=NULL))){
