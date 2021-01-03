@@ -79,6 +79,7 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+   
 struct thread
   {
     /* Owned by thread.c. */
@@ -106,8 +107,6 @@ struct thread
     struct lock *aquired_locks;         /*the lock which the thread wait*/
 
     //phase 2
-    struct list fd_list; 				//list of file descriptors
-    int fd_size;						//size of the file descriptors
     struct thread *parent;
     struct list_elem child_elem;
     struct list children;
@@ -117,6 +116,10 @@ struct thread
     tid_t waiting_on;
     struct semaphore wait_child;
     struct semaphore parent_child_sync;
+    struct list fd_list; 				//list of file descriptors
+    int fd_size;						//size of the file descriptors
+    struct file* exec_file;
+
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
