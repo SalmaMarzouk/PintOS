@@ -1,3 +1,4 @@
+
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
@@ -6,6 +7,8 @@
 
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+
+#include "threads/loader.h"
 
 static void syscall_handler (struct intr_frame *);
 static void validate_void_ptr(const void* pt);
@@ -23,17 +26,18 @@ static void remove_wrapper(struct intr_frame *f,void* esp);
 static bool remove (const char *file);
 static void open_wrapper(struct intr_frame *f,void* esp);
 static int open (const char *file);
+static void filesize_wrapper(struct intr_frame *f,void* esp);
+static int filesize (int fd);
 static void read_wrapper (struct intr_frame *f,void* esp);
 static int read(int fd, void *buffer, unsigned size);
 static void write_wrapper(struct intr_frame *f,void* esp);
 static int write(int fd, const void *buffer, unsigned size);
-static void tell_wrapper(struct intr_frame *f,void* esp);
-static int tell (int fd);
 static void seek_wrapper(struct intr_frame *f,void* esp);
 static int seek (int fd,unsigned position);
+static void tell_wrapper(struct intr_frame *f,void* esp);
+static int tell (int fd);
+static void close_wrapper(void* esp);
 static void close (int fd);
-void filesize_wrapper(struct intr_frame *f,void* esp);
-int filesize (int fd);
 static struct fd_element* get_fd(int fd);
 
 static struct lock files_sync_lock;
@@ -74,7 +78,7 @@ syscall_handler (struct intr_frame *f)
            open_wrapper(f,f->esp);
            break;
        case SYS_FILESIZE:
-            filesize_wrapper(f,f -> esp);
+           filesize_wrapper(f,f -> esp);
            break;
        case SYS_READ:
            read_wrapper(f,f -> esp);
@@ -83,10 +87,10 @@ syscall_handler (struct intr_frame *f)
            write_wrapper(f,f -> esp);
            break;
        case SYS_SEEK:
-	   seek_wrapper(f,f->esp);
+           seek_wrapper(f,f->esp);
            break;
        case SYS_TELL:
-	   tell_wrapper(f,f->esp);
+           tell_wrapper(f,f->esp);
            break;
        case SYS_CLOSE:
            close_wrapper(f->esp);
@@ -121,7 +125,6 @@ static void exec_wrapper(struct intr_frame *f){
 
 static void wait_wrapper(struct intr_frame *f){
     int* temp = (int*)f->esp +1;
-    //int pid = get_int((int**)&temp);
     validate_void_ptr((const void*)temp);
     int pid = *(temp);
     f->eax = wait(pid);
@@ -190,13 +193,30 @@ static int open (const char *file){
     {
         current->fd_size = current->fd_size + 1;
         fd = current->fd_size;
-        struct fd_element *f = (struct fd_element*) malloc(sizeof(struct fd_element));
-        f->fd = fd;
-        f->file = opened_file;
+        struct fd_element *file = (struct fd_element*) malloc(sizeof(struct fd_element));
+        file->fd = fd;
+        file->file = opened_file;
         // add the fd_element to the thread fd_list
-        list_push_back(&current->fd_list, &f->element);
+        list_push_back(&current->fd_list, &file->element);
     }
     return fd;
+}
+
+static void filesize_wrapper(struct intr_frame *f,void* esp){
+    int* temp = (int*)f->esp+1;
+    validate_void_ptr((const void*)temp);
+    void* fd = (void*)(*(temp));
+    //void* fd = (void*)(*((int*)esp+1));
+    //validate_void_ptr(fd);
+    f -> eax = filesize(fd);
+}
+
+static int filesize (int fd){
+    struct file *file = get_fd(fd)->file;
+    lock_acquire(&files_sync_lock);
+    int size = file_length(file);
+    lock_release(&files_sync_lock);
+    return size;
 }
 
 static void read_wrapper (struct intr_frame *f,void* esp){
@@ -229,7 +249,7 @@ static int read(int fd, void *buffer, unsigned size){
         lock_release(&files_sync_lock);
         if(bytes_read < (int)size && bytes_read != 0)
         {
-            //error happened
+            //some error happened
             bytes_read = -1;
         }
     }
@@ -278,6 +298,26 @@ static int write(int fd, const void *buffer, unsigned size){
     return written;
 }
 
+static void seek_wrapper(struct intr_frame *f,void* esp){
+    int* tmp1 = (int*)esp+1;
+    int* tmp2 = (int*)esp+2;
+    validate_void_ptr((const void*)tmp1);
+    validate_void_ptr((const void*)tmp2);
+    int fd=*(tmp1);
+    unsigned position=*(tmp2);
+    f->eax=seek(fd,position);
+}
+
+static int seek (int fd,unsigned position){
+  struct file* f;
+  f = get_fd(fd);
+  if (!f){
+      return -1;
+  }
+  file_seek (f,position);
+  return 0;
+}
+
 static void tell_wrapper(struct intr_frame *f,void* esp){
     int* tmp = (int*)esp+1;
     validate_void_ptr((const void*)tmp);
@@ -294,28 +334,11 @@ static int tell (int fd){
   return file_tell(f);
 }
 
-static void seek_wrapper(struct intr_frame *f,void* esp){
-    int* tmp1 = (int*)esp+1;
-    int* tmp2 = (int*)esp+2;
-    validate_void_ptr((const void*)tmp1);
-    validate_void_ptr((const void*)tmp2);
-    int fd=*(tmp1);
-    unsigned position=*(tmp2);
-    f->eax=seek(fd,position);
-}
-static int seek (int fd,unsigned position){
-  struct file* f;
-  f = get_fd(fd);
-  if (!f){
-      return -1;
-  }
-  file_seek (f,position);
-  return 0;
-}
-void close_wrapper(void* esp){
+static void close_wrapper(void* esp){
     int fd = *((int*)esp+1);
     close(fd);
 }
+
 static void close (int fd){
     struct list_elem *e;
     if(list_empty(&thread_current()->fd_list))
@@ -335,20 +358,6 @@ static void close (int fd){
     return;
 
 }
-
-void filesize_wrapper(struct intr_frame *f,void* esp){
-    void* fd = (void*)(*((int*)esp+1));
-    validate_void_ptr(fd);
-    f -> eax = filesize(fd);
-}
-int filesize (int fd){
-    struct file *file = get_fd(fd)->file;
-    lock_acquire(&files_sync_lock);
-    int size = file_length(file);
-    lock_release(&files_sync_lock);
-    return size;
-}
-
 
 static struct fd_element* get_fd(int fd)
 {
@@ -370,3 +379,4 @@ static void validate_void_ptr(const void* pt){
      }
    
 }
+

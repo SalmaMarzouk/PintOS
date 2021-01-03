@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -50,9 +51,10 @@ process_execute (const char *file_name)
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  palloc_free_page(name);
   sema_down(&thread_current()->parent_child_sync);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  if (tid == TID_ERROR){
+    palloc_free_page (fn_copy);} 
   return tid;
 }
 
@@ -67,6 +69,10 @@ start_process (void *file_name_)
   //modified
   //extract the name
   char *temp = palloc_get_page (0);
+  if(temp ==NULL){
+  success = false;
+  goto done;
+  }
   strlcpy(temp, file_name, PGSIZE);
   char *context = NULL;
   char *name = strtok_r(file_name, " ", &context);
@@ -84,8 +90,10 @@ start_process (void *file_name_)
     push_to_stack(&if_.esp, temp);
   }
 
+  palloc_free_page(temp);
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  done:
   if (!success) {
     //modified
     if(thread_current()->parent !=NULL){
@@ -186,6 +194,18 @@ process_exit (void)
     }
   }
 
+  if(!list_empty(&cur->fd_list)){
+    struct list_elem *e =list_begin (&cur->fd_list);
+    while (e != list_end (&cur->fd_list)){
+              struct list_elem *temp=list_next (e);
+              struct fd_element *elem = list_entry (e, struct fd_element, element);
+              list_remove(e);
+              if(elem != NULL){
+                file_close(elem->file);
+              }
+              e = temp;       
+    }
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -203,6 +223,11 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+    
+  if(cur->exec_file!=NULL){
+  file_allow_write(cur->exec_file);
+  file_close(cur->exec_file);
+  }
 }
 
 /* Sets up the CPU for running user code in the current
@@ -319,7 +344,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
   
-  file_deny_write (file);
   
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -333,6 +357,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
+
+t->exec_file = file;
+  file_deny_write (file);
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -407,7 +434,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
