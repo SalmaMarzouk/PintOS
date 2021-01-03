@@ -112,8 +112,10 @@ struct thread
     struct list_elem child_elem;
     struct list children;
     int child_status;
+    int exit_status;
     bool child_creation_sucess;
-    struct semaphore wait;
+    tid_t waiting_on;
+    struct semaphore wait_child;
     struct semaphore parent_child_sync;
 
     /* Owned by thread.c. */
