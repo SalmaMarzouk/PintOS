@@ -190,11 +190,11 @@ static int open (const char *file){
     {
         current->fd_size = current->fd_size + 1;
         fd = current->fd_size;
-        struct fd_element *file = (struct fd_element*) malloc(sizeof(struct fd_element));
-        file->fd = fd;
-        file->file = opened_file;
+        struct fd_element *f = (struct fd_element*) malloc(sizeof(struct fd_element));
+        f->fd = fd;
+        f->file = opened_file;
         // add the fd_element to the thread fd_list
-        list_push_back(&current->fd_list, &file->element);
+        list_push_back(&current->fd_list, &f->element);
     }
     return fd;
 }
