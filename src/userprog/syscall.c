@@ -1,4 +1,3 @@
-
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
@@ -8,7 +7,6 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 
-#include "threads/loader.h"
 
 static void syscall_handler (struct intr_frame *);
 static void validate_void_ptr(const void* pt);
@@ -32,8 +30,8 @@ static void read_wrapper (struct intr_frame *f,void* esp);
 static int read(int fd, void *buffer, unsigned size);
 static void write_wrapper(struct intr_frame *f,void* esp);
 static int write(int fd, const void *buffer, unsigned size);
-static void seek_wrapper(struct intr_frame *f,void* esp);
-static int seek (int fd,unsigned position);
+static void seek_wrapper(void* esp);
+static void seek (int fd,unsigned position);
 static void tell_wrapper(struct intr_frame *f,void* esp);
 static int tell (int fd);
 static void close_wrapper(void* esp);
@@ -87,7 +85,7 @@ syscall_handler (struct intr_frame *f)
            write_wrapper(f,f -> esp);
            break;
        case SYS_SEEK:
-           seek_wrapper(f,f->esp);
+           seek_wrapper(f->esp);
            break;
        case SYS_TELL:
            tell_wrapper(f,f->esp);
@@ -298,24 +296,25 @@ static int write(int fd, const void *buffer, unsigned size){
     return written;
 }
 
-static void seek_wrapper(struct intr_frame *f,void* esp){
+static void seek_wrapper(void* esp){
     int* tmp1 = (int*)esp+1;
     int* tmp2 = (int*)esp+2;
     validate_void_ptr((const void*)tmp1);
     validate_void_ptr((const void*)tmp2);
     int fd=*(tmp1);
     unsigned position=*(tmp2);
-    f->eax=seek(fd,position);
+    seek(fd,position);
 }
 
-static int seek (int fd,unsigned position){
+static void seek (int fd,unsigned position){
+     struct fd_element *search;
+     search=get_fd(fd);
+     if(!search){
+            return;
+        }
   struct file* f;
-  f = get_fd(fd);
-  if (!f){
-      return -1;
-  }
+  f = search->file;
   file_seek (f,position);
-  return 0;
 }
 
 static void tell_wrapper(struct intr_frame *f,void* esp){
@@ -326,11 +325,13 @@ static void tell_wrapper(struct intr_frame *f,void* esp){
 }
 
 static int tell (int fd){
+ struct fd_element *search;
+     search=get_fd(fd);
+     if(!search){
+            return -1;
+        }
   struct file* f;
-  f=get_fd(fd);
-  if (!f){
-      return -1;
-  }
+  f = search->file;
   return file_tell(f);
 }
 
