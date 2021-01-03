@@ -89,7 +89,7 @@ syscall_handler (struct intr_frame *f)
 	   tell_wrapper(f,f->esp);
            break;
        case SYS_CLOSE:
-            close(*((int*)f->esp+1));
+           close_wrapper(f->esp);
            break;
        default:
           exit(-1);
@@ -229,7 +229,7 @@ static int read(int fd, void *buffer, unsigned size){
         lock_release(&files_sync_lock);
         if(bytes_read < (int)size && bytes_read != 0)
         {
-            //some error happened
+            //error happened
             bytes_read = -1;
         }
     }
@@ -312,7 +312,10 @@ static int seek (int fd,unsigned position){
   file_seek (f,position);
   return 0;
 }
-
+void close_wrapper(void* esp){
+    int fd = *((int*)esp+1);
+    close(fd);
+}
 static void close (int fd){
     struct list_elem *e;
     if(list_empty(&thread_current()->fd_list))
