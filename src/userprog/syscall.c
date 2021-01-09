@@ -51,6 +51,11 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   //modified
+  int32_t *try = f->esp;
+    for(int i=0;i<4;i++){
+    validate_void_ptr((const void*)try);
+    try = try+1;
+    } 
   validate_void_ptr((const void*)f->esp);
   int sys_code = *(int*)f->esp;
   switch(sys_code){
@@ -117,6 +122,7 @@ static void exec_wrapper(struct intr_frame *f){
     int* temp = (int*)f->esp+1;
     validate_void_ptr((const void*)temp);
     validate_void_ptr((const void*)*temp);
+    validate_void_ptr((const void*)*temp+1);
     char *cmd = (void*)(*(temp));
     f->eax = exec(cmd);
 }
@@ -380,4 +386,3 @@ static void validate_void_ptr(const void* pt){
      }
    
 }
-
